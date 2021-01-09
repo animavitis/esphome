@@ -6,13 +6,7 @@
 namespace esphome {
 namespace remote_transmitter {
 
-class RemoteTransmitterComponent : public remote_base::RemoteTransmitterBase,
-                                   public Component
-#ifdef ARDUINO_ARCH_ESP32
-    ,
-                                   public remote_base::RemoteRMTChannel
-#endif
-{
+class RemoteTransmitterComponent : public remote_base::RemoteTransmitterBase, public Component {
  public:
   explicit RemoteTransmitterComponent(GPIOPin *pin) : remote_base::RemoteTransmitterBase(pin) {}
 
@@ -40,7 +34,6 @@ class RemoteTransmitterComponent : public remote_base::RemoteTransmitterBase,
   uint32_t current_carrier_frequency_{UINT32_MAX};
   bool initialized_{false};
   std::vector<rmt_item32_t> rmt_temp_;
-  esp_err_t error_code_{ESP_OK};
 #endif
   uint8_t carrier_duty_percent_{50};
 };
