@@ -146,21 +146,15 @@ template<typename T> class RemoteProtocol {
 
 class RemoteComponentBase {
  public:
-  explicit RemoteComponentBase(GPIOPin *pin) : pin_(pin){};
-
- protected:
-  GPIOPin *pin_;
-};
+  explicit RemoteComponentBase(GPIOPin *pin);
 
 #ifdef ARDUINO_ARCH_ESP32
-class RemoteRMTChannel {
- public:
-  explicit RemoteRMTChannel(uint8_t mem_block_num = 1);
-
-  void config_rmt(rmt_config_t &rmt);
+  void set_channel(rmt_channel_t channel) { this->channel_ = channel; }
   void set_clock_divider(uint8_t clock_divider) { this->clock_divider_ = clock_divider; }
+#endif
 
  protected:
+#ifdef ARDUINO_ARCH_ESP32
   uint32_t from_microseconds(uint32_t us) {
     const uint32_t ticks_per_ten_us = 80000000u / this->clock_divider_ / 100000u;
     return us * ticks_per_ten_us / 10;
@@ -169,12 +163,15 @@ class RemoteRMTChannel {
     const uint32_t ticks_per_ten_us = 80000000u / this->clock_divider_ / 100000u;
     return (ticks * 10) / ticks_per_ten_us;
   }
-  RemoteComponentBase *remote_base_;
-  rmt_channel_t channel_{RMT_CHANNEL_0};
-  uint8_t mem_block_num_;
-  uint8_t clock_divider_{80};
-};
 #endif
+
+  GPIOPin *pin_;
+#ifdef ARDUINO_ARCH_ESP32
+  rmt_channel_t channel_{RMT_CHANNEL_0};
+  uint8_t clock_divider_{80};
+  esp_err_t error_code_{ESP_OK};
+#endif
+};
 
 class RemoteTransmitterBase : public RemoteComponentBase {
  public:
@@ -270,11 +267,11 @@ class RemoteReceiverBase : public RemoteComponentBase {
   uint8_t tolerance_{25};
 };
 
-class RemoteReceiverBinarySensorBase : public binary_sensor::BinarySensorInitiallyOff,
+class RemoteReceiverBinarySensorBase : public binary_sensor::BinarySensor,
                                        public Component,
                                        public RemoteReceiverListener {
  public:
-  explicit RemoteReceiverBinarySensorBase() : BinarySensorInitiallyOff() {}
+  explicit RemoteReceiverBinarySensorBase() : BinarySensor() {}
   void dump_config() override;
   virtual bool matches(RemoteReceiveData src) = 0;
   bool on_receive(RemoteReceiveData src) override {
@@ -323,9 +320,6 @@ template<typename... Ts> class RemoteTransmitterActionBase : public Action<Ts...
  public:
   void set_parent(RemoteTransmitterBase *parent) { this->parent_ = parent; }
 
-  TEMPLATABLE_VALUE(uint32_t, send_times);
-  TEMPLATABLE_VALUE(uint32_t, send_wait);
-
   void play(Ts... x) override {
     auto call = this->parent_->transmit();
     this->encode(call.get_data(), x...);
@@ -334,9 +328,12 @@ template<typename... Ts> class RemoteTransmitterActionBase : public Action<Ts...
     call.perform();
   }
 
- protected:
   virtual void encode(RemoteTransmitData *dst, Ts... x) = 0;
 
+  TEMPLATABLE_VALUE(uint32_t, send_times);
+  TEMPLATABLE_VALUE(uint32_t, send_wait);
+
+ protected:
   RemoteTransmitterBase *parent_{};
 };
 

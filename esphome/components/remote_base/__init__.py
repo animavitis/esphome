@@ -5,8 +5,9 @@ from esphome.components import binary_sensor
 from esphome.const import CONF_DATA, CONF_TRIGGER_ID, CONF_NBITS, CONF_ADDRESS, \
     CONF_COMMAND, CONF_CODE, CONF_PULSE_LENGTH, CONF_SYNC, CONF_ZERO, CONF_ONE, CONF_INVERTED, \
     CONF_PROTOCOL, CONF_GROUP, CONF_DEVICE, CONF_STATE, CONF_CHANNEL, CONF_FAMILY, CONF_REPEAT, \
-    CONF_WAIT_TIME, CONF_TIMES, CONF_TYPE_ID, CONF_CARRIER_FREQUENCY, CONF_RC_CODE_1, CONF_RC_CODE_2
+    CONF_WAIT_TIME, CONF_TIMES, CONF_TYPE_ID, CONF_CARRIER_FREQUENCY
 from esphome.core import coroutine
+from esphome.py_compat import string_types, text_type
 from esphome.util import Registry, SimpleRegistry
 
 AUTO_LOAD = ['binary_sensor']
@@ -51,7 +52,7 @@ def register_trigger(name, type, data_type):
         cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(type),
         cv.GenerateID(CONF_RECEIVER_ID): cv.use_id(RemoteReceiverBase),
     })
-    registerer = TRIGGER_REGISTRY.register(f'on_{name}', validator)
+    registerer = TRIGGER_REGISTRY.register('on_{}'.format(name), validator)
 
     def decorator(func):
         @coroutine
@@ -86,8 +87,8 @@ def validate_repeat(value):
     if isinstance(value, dict):
         return cv.Schema({
             cv.Required(CONF_TIMES): cv.templatable(cv.positive_int),
-            cv.Optional(CONF_WAIT_TIME, default='25ms'):
-                cv.templatable(cv.positive_time_period_microseconds),
+            cv.Optional(CONF_WAIT_TIME, default='10ms'):
+                cv.templatable(cv.positive_time_period_milliseconds),
         })(value)
     return validate_repeat({CONF_TIMES: value})
 
@@ -97,7 +98,7 @@ def register_action(name, type_, schema):
         cv.GenerateID(CONF_TRANSMITTER_ID): cv.use_id(RemoteTransmitterBase),
         cv.Optional(CONF_REPEAT): validate_repeat,
     })
-    registerer = automation.register_action(f'remote_transmitter.transmit_{name}',
+    registerer = automation.register_action('remote_transmitter.transmit_{}'.format(name),
                                             type_, validator)
 
     def decorator(func):
@@ -121,11 +122,11 @@ def register_action(name, type_, schema):
 
 
 def declare_protocol(name):
-    data = ns.struct(f'{name}Data')
-    binary_sensor_ = ns.class_(f'{name}BinarySensor', RemoteReceiverBinarySensorBase)
-    trigger = ns.class_(f'{name}Trigger', RemoteReceiverTrigger)
-    action = ns.class_(f'{name}Action', RemoteTransmitterActionBase)
-    dumper = ns.class_(f'{name}Dumper', RemoteTransmitterDumper)
+    data = ns.struct('{}Data'.format(name))
+    binary_sensor_ = ns.class_('{}BinarySensor'.format(name), RemoteReceiverBinarySensorBase)
+    trigger = ns.class_('{}Trigger'.format(name), RemoteReceiverTrigger)
+    action = ns.class_('{}Action'.format(name), RemoteTransmitterActionBase)
+    dumper = ns.class_('{}Dumper'.format(name), RemoteTransmitterDumper)
     return data, binary_sensor_, trigger, action, dumper
 
 
@@ -140,7 +141,7 @@ DUMPER_REGISTRY = Registry({
 
 
 def validate_dumpers(value):
-    if isinstance(value, str) and value.lower() == 'all':
+    if isinstance(value, string_types) and value.lower() == 'all':
         return validate_dumpers(list(DUMPER_REGISTRY.keys()))
     return cv.validate_registry('dumper', DUMPER_REGISTRY)(value)
 
@@ -249,7 +250,7 @@ def lg_dumper(var, config):
 def lg_action(var, config, args):
     template_ = yield cg.templatable(config[CONF_DATA], args, cg.uint32)
     cg.add(var.set_data(template_))
-    template_ = yield cg.templatable(config[CONF_NBITS], args, cg.uint8)
+    template_ = yield cg.templatable(config[CONF_DATA], args, cg.uint8)
     cg.add(var.set_nbits(template_))
 
 
@@ -286,42 +287,6 @@ def nec_action(var, config, args):
     cg.add(var.set_address(template_))
     template_ = yield cg.templatable(config[CONF_COMMAND], args, cg.uint16)
     cg.add(var.set_command(template_))
-
-
-# Pioneer
-(PioneerData, PioneerBinarySensor, PioneerTrigger, PioneerAction,
- PioneerDumper) = declare_protocol('Pioneer')
-PIONEER_SCHEMA = cv.Schema({
-    cv.Required(CONF_RC_CODE_1): cv.hex_uint16_t,
-    cv.Optional(CONF_RC_CODE_2, default=0): cv.hex_uint16_t,
-})
-
-
-@register_binary_sensor('pioneer', PioneerBinarySensor, PIONEER_SCHEMA)
-def pioneer_binary_sensor(var, config):
-    cg.add(var.set_data(cg.StructInitializer(
-        PioneerData,
-        ('rc_code_1', config[CONF_RC_CODE_1]),
-        ('rc_code_2', config[CONF_RC_CODE_2]),
-    )))
-
-
-@register_trigger('pioneer', PioneerTrigger, PioneerData)
-def pioneer_trigger(var, config):
-    pass
-
-
-@register_dumper('pioneer', PioneerDumper)
-def pioneer_dumper(var, config):
-    pass
-
-
-@register_action('pioneer', PioneerAction, PIONEER_SCHEMA)
-def pioneer_action(var, config, args):
-    template_ = yield cg.templatable(config[CONF_RC_CODE_1], args, cg.uint16)
-    cg.add(var.set_rc_code_1(template_))
-    template_ = yield cg.templatable(config[CONF_RC_CODE_2], args, cg.uint16)
-    cg.add(var.set_rc_code_2(template_))
 
 
 # Sony
@@ -420,7 +385,7 @@ def raw_action(var, config, args):
 RC5Data, RC5BinarySensor, RC5Trigger, RC5Action, RC5Dumper = declare_protocol('RC5')
 RC5_SCHEMA = cv.Schema({
     cv.Required(CONF_ADDRESS): cv.All(cv.hex_int, cv.Range(min=0, max=0x1F)),
-    cv.Required(CONF_COMMAND): cv.All(cv.hex_int, cv.Range(min=0, max=0x7F)),
+    cv.Required(CONF_COMMAND): cv.All(cv.hex_int, cv.Range(min=0, max=0x3F)),
 })
 
 
@@ -455,7 +420,7 @@ def rc5_action(var, config, args):
 RC_SWITCH_TIMING_SCHEMA = cv.All([cv.uint8_t], cv.Length(min=2, max=2))
 
 RC_SWITCH_PROTOCOL_SCHEMA = cv.Any(
-    cv.int_range(min=1, max=8),
+    cv.int_range(min=1, max=7),
     cv.Schema({
         cv.Required(CONF_PULSE_LENGTH): cv.uint32_t,
         cv.Optional(CONF_SYNC, default=[1, 31]): RC_SWITCH_TIMING_SCHEMA,
@@ -467,33 +432,17 @@ RC_SWITCH_PROTOCOL_SCHEMA = cv.Any(
 
 
 def validate_rc_switch_code(value):
-    if not isinstance(value, (str, str)):
+    if not isinstance(value, (str, text_type)):
         raise cv.Invalid("All RCSwitch codes must be in quotes ('')")
     for c in value:
         if c not in ('0', '1'):
-            raise cv.Invalid("Invalid RCSwitch code character '{}'. Only '0' and '1' are allowed"
-                             "".format(c))
-    if len(value) > 64:
-        raise cv.Invalid("Maximum length for RCSwitch codes is 64, code '{}' has length {}"
+            raise cv.Invalid(u"Invalid RCSwitch code character '{}'. Only '0' and '1' are allowed"
+                             u"".format(c))
+    if len(value) > 32:
+        raise cv.Invalid("Maximum length for RCSwitch codes is 32, code '{}' has length {}"
                          "".format(value, len(value)))
     if not value:
         raise cv.Invalid("RCSwitch code must not be empty")
-    return value
-
-
-def validate_rc_switch_raw_code(value):
-    if not isinstance(value, (str, str)):
-        raise cv.Invalid("All RCSwitch raw codes must be in quotes ('')")
-    for c in value:
-        if c not in ('0', '1', 'x'):
-            raise cv.Invalid(
-                "Invalid RCSwitch raw code character '{}'.Only '0', '1' and 'x' are allowed"
-                .format(c))
-    if len(value) > 64:
-        raise cv.Invalid("Maximum length for RCSwitch raw codes is 64, code '{}' has length {}"
-                         "".format(value, len(value)))
-    if not value:
-        raise cv.Invalid("RCSwitch raw code must not be empty")
     return value
 
 
@@ -508,7 +457,7 @@ def build_rc_switch_protocol(config):
 
 
 RC_SWITCH_RAW_SCHEMA = cv.Schema({
-    cv.Required(CONF_CODE): validate_rc_switch_raw_code,
+    cv.Required(CONF_CODE): validate_rc_switch_code,
     cv.Optional(CONF_PROTOCOL, default=1): RC_SWITCH_PROTOCOL_SCHEMA,
 })
 RC_SWITCH_TYPE_A_SCHEMA = cv.Schema({
@@ -540,15 +489,13 @@ RC_SWITCH_TYPE_D_SCHEMA = cv.Schema({
 RC_SWITCH_TRANSMITTER = cv.Schema({
     cv.Optional(CONF_REPEAT, default={CONF_TIMES: 5}): cv.Schema({
         cv.Required(CONF_TIMES): cv.templatable(cv.positive_int),
-        cv.Optional(CONF_WAIT_TIME, default='0us'):
-            cv.templatable(cv.positive_time_period_microseconds),
+        cv.Optional(CONF_WAIT_TIME, default='10ms'):
+            cv.templatable(cv.positive_time_period_milliseconds),
     }),
 })
 
 rc_switch_protocols = ns.rc_switch_protocols
-RCSwitchData = ns.struct('RCSwitchData')
 RCSwitchBase = ns.class_('RCSwitchBase')
-RCSwitchTrigger = ns.class_('RCSwitchTrigger', RemoteReceiverTrigger)
 RCSwitchDumper = ns.class_('RCSwitchDumper', RemoteTransmitterDumper)
 RCSwitchRawAction = ns.class_('RCSwitchRawAction', RemoteTransmitterActionBase)
 RCSwitchTypeAAction = ns.class_('RCSwitchTypeAAction', RemoteTransmitterActionBase)
@@ -644,11 +591,6 @@ def rc_switch_type_d_action(var, config, args):
     cg.add(var.set_state((yield cg.templatable(config[CONF_STATE], args, bool))))
 
 
-@register_trigger('rc_switch', RCSwitchTrigger, RCSwitchData)
-def rc_switch_trigger(var, config):
-    pass
-
-
 @register_dumper('rc_switch', RCSwitchDumper)
 def rc_switch_dumper(var, config):
     pass
@@ -682,7 +624,7 @@ def samsung_dumper(var, config):
 
 @register_action('samsung', SamsungAction, SAMSUNG_SCHEMA)
 def samsung_action(var, config, args):
-    template_ = yield cg.templatable(config[CONF_DATA], args, cg.uint32)
+    template_ = yield cg.templatable(config[CONF_DATA], args, cg.uint16)
     cg.add(var.set_data(template_))
 
 
