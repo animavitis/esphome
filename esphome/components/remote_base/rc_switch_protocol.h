@@ -6,13 +6,6 @@
 namespace esphome {
 namespace remote_base {
 
-struct RCSwitchData {
-  uint64_t code;
-  uint8_t protocol;
-
-  bool operator==(const RCSwitchData &rhs) const { return code == rhs.code && protocol == rhs.protocol; }
-};
-
 class RCSwitchBase {
  public:
   RCSwitchBase() = default;
@@ -25,7 +18,7 @@ class RCSwitchBase {
 
   void sync(RemoteTransmitData *dst) const;
 
-  void transmit(RemoteTransmitData *dst, uint64_t code, uint8_t len) const;
+  void transmit(RemoteTransmitData *dst, uint32_t code, uint8_t len) const;
 
   bool expect_one(RemoteReceiveData &src) const;
 
@@ -33,22 +26,20 @@ class RCSwitchBase {
 
   bool expect_sync(RemoteReceiveData &src) const;
 
-  bool decode(RemoteReceiveData &src, uint64_t *out_data, uint8_t *out_nbits) const;
+  bool decode(RemoteReceiveData &src, uint32_t *out_data, uint8_t *out_nbits) const;
 
-  optional<RCSwitchData> decode(RemoteReceiveData &src) const;
+  static void simple_code_to_tristate(uint16_t code, uint8_t nbits, uint32_t *out_code);
 
-  static void simple_code_to_tristate(uint16_t code, uint8_t nbits, uint64_t *out_code);
-
-  static void type_a_code(uint8_t switch_group, uint8_t switch_device, bool state, uint64_t *out_code,
+  static void type_a_code(uint8_t switch_group, uint8_t switch_device, bool state, uint32_t *out_code,
                           uint8_t *out_nbits);
 
-  static void type_b_code(uint8_t address_code, uint8_t channel_code, bool state, uint64_t *out_code,
+  static void type_b_code(uint8_t address_code, uint8_t channel_code, bool state, uint32_t *out_code,
                           uint8_t *out_nbits);
 
-  static void type_c_code(uint8_t family, uint8_t group, uint8_t device, bool state, uint64_t *out_code,
+  static void type_c_code(uint8_t family, uint8_t group, uint8_t device, bool state, uint32_t *out_code,
                           uint8_t *out_nbits);
 
-  static void type_d_code(uint8_t group, uint8_t device, bool state, uint64_t *out_code, uint8_t *out_nbits);
+  static void type_d_code(uint8_t group, uint8_t device, bool state, uint32_t *out_code, uint8_t *out_nbits);
 
  protected:
   uint32_t sync_high_{};
@@ -60,11 +51,11 @@ class RCSwitchBase {
   bool inverted_{};
 };
 
-extern RCSwitchBase rc_switch_protocols[9];
+extern RCSwitchBase rc_switch_protocols[8];
 
-uint64_t decode_binary_string(const std::string &data);
+uint32_t decode_binary_string(const std::string &data);
 
-uint64_t decode_binary_string_mask(const std::string &data);
+uint32_t decode_binary_string_mask(const std::string &data);
 
 template<typename... Ts> class RCSwitchRawAction : public RemoteTransmitterActionBase<Ts...> {
  public:
@@ -73,7 +64,7 @@ template<typename... Ts> class RCSwitchRawAction : public RemoteTransmitterActio
 
   void encode(RemoteTransmitData *dst, Ts... x) override {
     auto code = this->code_.value(x...);
-    uint64_t the_code = decode_binary_string(code);
+    uint32_t the_code = decode_binary_string(code);
     uint8_t nbits = code.size();
 
     auto proto = this->protocol_.value(x...);
@@ -95,7 +86,7 @@ template<typename... Ts> class RCSwitchTypeAAction : public RemoteTransmitterAct
     uint8_t u_group = decode_binary_string(group);
     uint8_t u_device = decode_binary_string(device);
 
-    uint64_t code;
+    uint32_t code;
     uint8_t nbits;
     RCSwitchBase::type_a_code(u_group, u_device, state, &code, &nbits);
 
@@ -116,7 +107,7 @@ template<typename... Ts> class RCSwitchTypeBAction : public RemoteTransmitterAct
     auto channel = this->channel_.value(x...);
     auto state = this->state_.value(x...);
 
-    uint64_t code;
+    uint32_t code;
     uint8_t nbits;
     RCSwitchBase::type_b_code(address, channel, state, &code, &nbits);
 
@@ -141,7 +132,7 @@ template<typename... Ts> class RCSwitchTypeCAction : public RemoteTransmitterAct
 
     auto u_family = static_cast<uint8_t>(tolower(family[0]) - 'a');
 
-    uint64_t code;
+    uint32_t code;
     uint8_t nbits;
     RCSwitchBase::type_c_code(u_family, group, device, state, &code, &nbits);
 
@@ -163,7 +154,7 @@ template<typename... Ts> class RCSwitchTypeDAction : public RemoteTransmitterAct
 
     auto u_group = static_cast<uint8_t>(tolower(group[0]) - 'a');
 
-    uint64_t code;
+    uint32_t code;
     uint8_t nbits;
     RCSwitchBase::type_d_code(u_group, device, state, &code, &nbits);
 
@@ -175,7 +166,7 @@ template<typename... Ts> class RCSwitchTypeDAction : public RemoteTransmitterAct
 class RCSwitchRawReceiver : public RemoteReceiverBinarySensorBase {
  public:
   void set_protocol(const RCSwitchBase &a_protocol) { this->protocol_ = a_protocol; }
-  void set_code(uint64_t code) { this->code_ = code; }
+  void set_code(uint32_t code) { this->code_ = code; }
   void set_code(const std::string &code) {
     this->code_ = decode_binary_string(code);
     this->mask_ = decode_binary_string_mask(code);
@@ -203,8 +194,8 @@ class RCSwitchRawReceiver : public RemoteReceiverBinarySensorBase {
   bool matches(RemoteReceiveData src) override;
 
   RCSwitchBase protocol_;
-  uint64_t code_;
-  uint64_t mask_{0xFFFFFFFFFFFFFFFF};
+  uint32_t code_;
+  uint32_t mask_{0xFFFFFFFF};
   uint8_t nbits_;
 };
 
@@ -212,8 +203,6 @@ class RCSwitchDumper : public RemoteReceiverDumperBase {
  public:
   bool dump(RemoteReceiveData src) override;
 };
-
-using RCSwitchTrigger = RemoteReceiverTrigger<RCSwitchBase, RCSwitchData>;
 
 }  // namespace remote_base
 }  // namespace esphome
