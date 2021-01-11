@@ -25,7 +25,6 @@ template<typename... Ts> class NECAction : public RemoteTransmitterActionBase<Ts
  public:
   TEMPLATABLE_VALUE(uint16_t, address)
   TEMPLATABLE_VALUE(uint16_t, command)
-
   void encode(RemoteTransmitData *dst, Ts... x) override {
     NECData data{};
     data.address = this->address_.value(x...);

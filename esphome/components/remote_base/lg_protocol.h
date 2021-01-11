@@ -26,7 +26,6 @@ template<typename... Ts> class LGAction : public RemoteTransmitterActionBase<Ts.
  public:
   TEMPLATABLE_VALUE(uint32_t, data)
   TEMPLATABLE_VALUE(uint8_t, nbits)
-
   void encode(RemoteTransmitData *dst, Ts... x) override {
     LGData data{};
     data.data = this->data_.value(x...);
